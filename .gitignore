@@ -1,0 +1,43 @@
+# Environments & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Local DB / tooling
+pgdata/
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.log
+
+# Tooling caches
+.impeccable/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp

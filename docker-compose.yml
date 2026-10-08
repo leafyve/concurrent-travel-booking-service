@@ -1,0 +1,117 @@
+# Local/staging stack: API + PostgreSQL + the two background workers.
+# Migrations run once as a dedicated job before the app and workers start.
+#
+#   docker compose up --build            # start the stack
+#   docker compose run --rm seed         # (optional) load fictional demo data
+#   docker compose down -v               # stop and remove volumes
+
+name: travel-booking
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql+psycopg://booking:booking@postgres:5432/booking
+  JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-please-0123456789abcdef}
+  WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-dev-only-webhook-secret}
+  LOG_JSON: "true"
+  ENVIRONMENT: ${ENVIRONMENT:-local}
+
+x-app-build: &app-build
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: booking
+      POSTGRES_PASSWORD: booking
+      POSTGRES_DB: booking
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U booking -d booking"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    <<: *app-build
+    environment:
+      <<: *app-env
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *app-build
+    environment:
+      <<: *app-env
+    command:
+      ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        ["CMD", "python", "-c",
+         "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/ready',timeout=2).status==200 else 1)"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  worker-expiry:
+    <<: *app-build
+    # Workers do not serve the image's HTTP health endpoint.
+    healthcheck:
+      disable: true
+    environment:
+      <<: *app-env
+    command: ["python", "-m", "app.workers.cli", "expiry"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker-outbox:
+    <<: *app-build
+    healthcheck:
+      disable: true
+    environment:
+      <<: *app-env
+    command: ["python", "-m", "app.workers.cli", "outbox"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Optional one-off: `docker compose run --rm seed`
+  seed:
+    <<: *app-build
+    environment:
+      <<: *app-env
+    command: ["python", "-m", "scripts.seed"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    profiles: ["tools"]
+    restart: "no"
+
+volumes:
+  pgdata:

@@ -1,0 +1,25 @@
+# Example Caddy reverse proxy for the booking API.
+# Caddy obtains and renews Let's Encrypt TLS certificates automatically.
+# Replace api.example.com with your real domain (with DNS A/AAAA records set).
+
+api.example.com {
+    encode gzip
+
+    # Proxy to the API container/service on the internal network.
+    reverse_proxy api:8000 {
+        health_uri /health/ready
+        health_interval 15s
+    }
+
+    # Do not expose Prometheus metrics publicly; scrape them on the private net.
+    @metrics path /metrics
+    respond @metrics 404
+
+    header {
+        # Sensible security headers.
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+    }
+}

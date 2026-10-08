@@ -1,0 +1,162 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "travel-booking-orchestration"
+version = "0.1.0"
+description = "Travel Experience Inventory & Booking Orchestration Service — an independent backend portfolio project demonstrating concurrent inventory safety, idempotency, and production-oriented observability."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Lim En Le" }]
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "psycopg[binary]>=3.2",
+    "alembic>=1.14",
+    "pyjwt>=2.10",
+    "bcrypt>=4.2",
+    "prometheus-client>=0.21",
+    "structlog>=24.4",
+    "python-multipart>=0.0.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "httpx>=0.28",
+    "hypothesis>=6.115",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "types-psycopg2",
+]
+load = [
+    "locust>=2.32",
+]
+
+[project.scripts]
+booking-worker = "app.workers.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# ---------------------------------------------------------------------------
+# Ruff — linting + formatting
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+    "ASYNC",# flake8-async
+    "DTZ",  # flake8-datetimez (enforce timezone-aware datetimes)
+    "PL",   # pylint
+]
+ignore = [
+    "PLR0913",  # too many arguments (services legitimately take several)
+    "PLR0917",  # too many positional args (FastAPI query params read as positional)
+    "PLR2004",  # magic value comparison (noisy in tests)
+    "B008",     # function call in default arg (FastAPI Depends idiom)
+    "PLR0912",  # too many branches
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests and scripts legitimately use lazy imports and are allowed to be verbose.
+"tests/**" = ["PLR0915", "PLR0913", "PLC0415"]
+"scripts/**" = ["PLR0915", "PLC0415", "E501"]
+"alembic/**" = ["E501", "I001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+# ---------------------------------------------------------------------------
+# mypy — static typing
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+plugins = ["pydantic.mypy"]
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+namespace_packages = true
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+# Test modules exercise error paths and fixtures; relax the strictest rules.
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[[tool.mypy.overrides]]
+module = ["locust.*", "prometheus_client.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra --strict-markers"
+markers = [
+    "unit: pure-Python unit tests with no external dependencies",
+    "api: FastAPI endpoint tests using an ASGI transport",
+    "integration: tests that require a live PostgreSQL database",
+    "concurrency: tests that exercise concurrent access against PostgreSQL",
+    "contract: request/response contract tests",
+    "slow: tests that take longer to run",
+]
+filterwarnings = [
+    "error::DeprecationWarning:app.*",
+]
+
+# ---------------------------------------------------------------------------
+# coverage
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+branch = true
+source = ["app"]
+# SQLAlchemy's async layer bridges to sync code via greenlets; without this,
+# coverage under-reports service/repository lines that run after an `await`.
+concurrency = ["greenlet", "thread"]
+omit = [
+    "app/workers/cli.py",
+    "app/main.py",
+    "alembic/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]
