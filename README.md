@@ -92,6 +92,10 @@ PostgreSQL 16 · Alembic · pytest / pytest-asyncio / pytest-cov · Hypothesis �
 HTTPX · Ruff · mypy · Prometheus client · structlog · Docker / Docker Compose ·
 GitHub Actions · Locust.
 
+SQLAlchemy is constrained to the 2.0 release series used by the test and typing
+audit. A fresh install of 2.1.4 exposed incompatible query-result typing in CI;
+the constraint preserves the validated API without changing service code.
+
 ## 7. Database model
 
 11 tables: `users`, `merchants`, `experiences`, `experience_slots`,
